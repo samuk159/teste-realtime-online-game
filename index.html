@@ -3,15 +3,28 @@
 <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>20 ab</title>
+    <title>Teste Realtime Online Game</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            margin: 0px;
+        }
+
+        #app {
+            width: 800px;
+            height: 600px;
+        }
+
+        .player {
+            position: absolute;
+        }
+    </style>
 </head>
 <body>
-    <div id="app" @keyup.enter="goToDirection(1)">
-        <div class="player" :style="'width: ' + playerBoxSize + 'px;' + 'height: ' + playerBoxSize + 'px;' + 'left: ' + (playerX - (playerBoxSize / 2)) + 'px;' + 'top: ' + (playerY - (playerBoxSize / 2)) + 'px;'">
-
+    <div id="app">
+        <div v-for="(player, index) in players" :key="'player-' + player.id">
+            <div class="player" :style="'background-color: ' + player.color + ';width: ' + playerBoxSize + 'px;' + 'height: ' + playerBoxSize + 'px;' + 'left: ' + (player.x - (playerBoxSize / 2)) + 'px;' + 'top: ' + (player.y - (playerBoxSize / 2)) + 'px;'"></div>
         </div>
     </div>
 
@@ -20,13 +33,26 @@
         var app = new Vue({
             el: '#app',
             data: {
-                playerX: 400,
-                playerY: 300,
                 playerBoxSize: 32,
                 playerSpeed: 15,
-                keysPressed: {}
+                keysPressed: {},
+                socket: null,
+                connected: false,
+                socketIOServerURL: 'https://server-20ab.herokuapp.com',
+                playerId: null,
+                players: [],
+                colors: ['blue', 'red', 'green', 'yellow', 'purple', 'orange']
             },
-            created() {
+            mounted() {
+                this.playerId = this.getUUID();
+                this.players[0] = {
+                    id: this.playerId,
+                    x: 400,
+                    y: 300,
+                    color: this.colors[0]
+                };
+                this.reloadPlayers();
+                this.getSocket();
                 onkeydown = onkeyup = this.handleKeyPressed;
             },
             methods: {
@@ -35,20 +61,95 @@
 
                     if (e && e.key) {
                         this.keysPressed[e.key] = e.type == 'keydown';
+                        let positionChanged = false;
 
                         if (this.keysPressed.a) {
-                            this.playerX -= this.playerSpeed;
+                            this.players[0].x -= this.playerSpeed;
+                            positionChanged = true;
                         } else if (this.keysPressed.d) {
-                            this.playerX += this.playerSpeed;
+                            this.players[0].x += this.playerSpeed;
+                            positionChanged = true;
                         }
 
                         if (this.keysPressed.w) {
-                            this.playerY -= this.playerSpeed;
+                            this.players[0].y -= this.playerSpeed;
+                            positionChanged = true;
                         } else if (this.keysPressed.s) {
-                            this.playerY += this.playerSpeed;
+                            this.players[0].y += this.playerSpeed;
+                            positionChanged = true;
+                        }
+
+                        if (positionChanged) {
+                            this.reloadPlayers();
+
+                            if (this.socket && this.connected) {
+                                this.socket.emit('emit-event', JSON.stringify({
+                                    channel: 'teste-realtime-online-game',
+                                    message: this.players[0]
+                                }));
+                            }
                         }
                     }
-                }
+                },
+
+                getSocket() {
+                    if (!this.socket) {
+                        this.socket = io(this.socketIOServerURL);
+
+                        this.socket.on('connect', () => {
+                            this.connected = true;
+                            console.log('Conectado ao servidor');
+                        });
+
+                        this.socket.on('disconnect', () => {
+                            this.connected = false;
+                            console.log('Desconectado do servidor');
+                        });
+
+                        this.socket.on('teste-realtime-online-game', data => {
+                            try {
+                                if (data.id !== this.playerId) { debugger;
+                                    let index = this.players.findIndex(p => p.id === data.id);
+
+                                    if (index === -1) {
+                                        index = this.players.length;
+                                    }
+
+                                    data.color = this.getColorAcordingToIndex(index);
+                                    this.players[index] = data;
+                                    this.reloadPlayers();
+                                }
+                            } catch (e) {
+                                console.error(e);
+                            }
+                        });
+                    }
+                },
+
+                getUUID() {
+                  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                  });
+                },
+
+                reloadPlayers() {
+                    let players = this.players;
+                    this.players = [];
+                    this.players = players;
+                },
+
+                getColorAcordingToIndex(index) {
+                    if (index <= this.colors.length - 1) {
+                        return this.colors[index];
+                    } else {
+                        return this.colors[this.getRandomArbitrary(0, this.colors.length - 1)];
+                    }
+                },
+
+                getRandomArbitrary(min, max) {
+                    return Math.floor(Math.random() * (max - min + 1)) + min;
+                },
             }
         });
     </script>   
